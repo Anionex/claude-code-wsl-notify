@@ -1,8 +1,4 @@
 #!/bin/bash
-# Set a unique marker on this tab for identification
-MARKER="CC-$$"
-echo -ne "\033]0;${MARKER}\007"
-
 INPUT=$(cat)
 
 # Extract summary
@@ -11,18 +7,42 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Find tab index matching our marker
-TAB_INDEX=$(powershell.exe -NoProfile -Command "
+# Find tab index by matching cwd folder name in tab titles
+CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+FOLDER=$(basename "${CWD:-$PWD}")
+PREFIX="${FOLDER:0:6}"
+
+TAB_NUM=$(powershell.exe -NoProfile -Command "
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 \$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
 \$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
 if(\$w){\$tc=New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
-\$ts=\$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc);\$i=0
-foreach(\$t in \$ts){if(\$t.Current.Name -like '*${MARKER}*'){Write-Output \$i;exit}\$i++}}
-Write-Output -1
+\$ts=\$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc);\$i=1
+foreach(\$t in \$ts){if(\$t.Current.Name -like '*${PREFIX}*'){Write-Output \$i;exit}\$i++}}
+Write-Output 0
 " 2>/dev/null | tr -d '\r')
-TAB_INDEX=${TAB_INDEX:--1}
+TAB_NUM=${TAB_NUM:-0}
+
+# Write click helper script
+CLICK_PS1=$(wslpath -w /tmp/cc-notify-click.ps1)
+cat > /tmp/cc-notify-click.ps1 << 'PSEOF'
+Add-Type @"
+using System;using System.Runtime.InteropServices;
+public class W{
+[DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);
+[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);
+}
+"@
+Add-Type -AssemblyName System.Windows.Forms
+$p=Get-Process -Name WindowsTerminal -EA 0
+if($p){[W]::ShowWindow($p[0].MainWindowHandle,9);[W]::SetForegroundWindow($p[0].MainWindowHandle)
+PSEOF
+if [ "$TAB_NUM" -gt 0 ] 2>/dev/null && [ "$TAB_NUM" -le 9 ] 2>/dev/null; then
+    echo "Start-Sleep -Milliseconds 200;[System.Windows.Forms.SendKeys]::SendWait('^(%${TAB_NUM})')}" >> /tmp/cc-notify-click.ps1
+else
+    echo "}" >> /tmp/cc-notify-click.ps1
+fi
 
 # Show notification popup
 powershell.exe -NoProfile -Command "
@@ -90,9 +110,7 @@ public class W32{
 
 # Click to focus terminal tab
 \$click={
-\$p=Get-Process -Name WindowsTerminal -EA 0
-if(\$p){[W32]::ShowWindow(\$p[0].MainWindowHandle,9);[W32]::SetForegroundWindow(\$p[0].MainWindowHandle)
-if($TAB_INDEX -ge 0){Start-Process wt.exe -ArgumentList '-w 0 focus-tab --index $TAB_INDEX' -WindowStyle Hidden -EA 0}}
+Start-Process powershell.exe -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$CLICK_PS1' -WindowStyle Hidden -EA 0
 \$f.Close()}
 \$f.Add_Click(\$click)
 \$title.Add_Click(\$click)
