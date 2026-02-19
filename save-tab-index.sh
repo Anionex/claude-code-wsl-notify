@@ -1,8 +1,5 @@
 #!/bin/bash
-# Save active (selected) tab index at shell startup, keyed by WT_SESSION
-# Must be called from .bashrc (synchronously) when the tab is guaranteed to be active
 [ -z "$WT_SESSION" ] && exit 0
-# New tab is always the last one; count total tabs
 TAB_NUM=$(powershell.exe -NoProfile -Command "
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
