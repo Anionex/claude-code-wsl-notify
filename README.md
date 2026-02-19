@@ -73,10 +73,10 @@ chmod +x install.sh
 ## 卸载
 
 ```bash
-rm ~/.claude/hooks/stop-notify.sh
+rm ~/.claude/hooks/stop-notify.sh ~/.claude/hooks/save-tab-index.sh
 ```
 
-然后从 `~/.claude/settings.json` 中移除 `Stop` hook 配置。
+然后从 `~/.claude/settings.json` 中移除 `Stop` hook 配置，从 `~/.bashrc` 中移除 `save-tab-index.sh` 相关行。
 
 ## License
 

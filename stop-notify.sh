@@ -7,21 +7,8 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Find tab index by matching cwd folder name in tab titles
-CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-FOLDER=$(basename "${CWD:-$PWD}")
-PREFIX="${FOLDER:0:6}"
-
-TAB_NUM=$(powershell.exe -NoProfile -Command "
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-\$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
-\$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
-if(\$w){\$tc=New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
-\$ts=\$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc);\$i=1
-foreach(\$t in \$ts){if(\$t.Current.Name -like '*${PREFIX}*'){Write-Output \$i;exit}\$i++}}
-Write-Output 0
-" 2>/dev/null | tr -d '\r')
+# Read tab index saved at shell startup
+TAB_NUM=$(cat "/tmp/cc-tab-$WT_SESSION" 2>/dev/null)
 TAB_NUM=${TAB_NUM:-0}
 
 # Write click helper script
