@@ -7,18 +7,23 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Read saved tab index, validate against current tab count
+# Read saved tab index, validate against current tab count, get tab title
 TAB_NUM=$(cat "/tmp/cc-tab-$WT_SESSION" 2>/dev/null)
 TAB_NUM=${TAB_NUM:-0}
+TAB_TITLE=""
 if [ "$TAB_NUM" -gt 0 ] 2>/dev/null; then
-    CUR_COUNT=$(powershell.exe -NoProfile -Command "
+    TAB_INFO=$(powershell.exe -NoProfile -Command "
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 \$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
 \$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
 if(\$w){\$tc = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
-Write-Output \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc).Count}
+\$tabs = \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc)
+Write-Output \$tabs.Count
+if($TAB_NUM -le \$tabs.Count){Write-Output \$tabs[$((TAB_NUM-1))].Current.Name}}
 " 2>/dev/null | tr -d '\r')
+    CUR_COUNT=$(echo "$TAB_INFO" | head -1)
+    TAB_TITLE=$(echo "$TAB_INFO" | sed -n '2p')
     [ "$CUR_COUNT" -lt "$TAB_NUM" ] 2>/dev/null && TAB_NUM=0
 fi
 
@@ -63,7 +68,7 @@ public class W32{
 \$f.Controls.Add(\$bar)
 
 \$title=New-Object Windows.Forms.Label
-\$title.Text='Claude Code'
+\$title.Text='Claude Code - $TAB_TITLE'
 \$title.Location=[Drawing.Point]::new(18,14)
 \$title.Size='360,22'
 \$title.Font=New-Object Drawing.Font('Segoe UI',10.5,[Drawing.FontStyle]::Bold)
