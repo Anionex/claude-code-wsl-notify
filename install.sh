@@ -21,7 +21,7 @@ chmod +x "$HOOK_DIR/stop-notify.sh" "$HOOK_DIR/save-tab-index.sh"
 
 # Add tab index saving to bashrc
 if ! grep -qF "save-tab-index.sh" "$HOME/.bashrc" 2>/dev/null; then
-    echo -e '\n# claude-code-wsl-notify: save tab index on shell startup\n[ -n "$WT_SESSION" ] && bash ~/.claude/hooks/save-tab-index.sh &>/dev/null &' >> "$HOME/.bashrc"
+    echo -e '\n# claude-code-wsl-notify: save tab index on shell startup\n[ -n "$WT_SESSION" ] && [ -f ~/.claude/hooks/save-tab-index.sh ] && bash ~/.claude/hooks/save-tab-index.sh &>/dev/null &' >> "$HOME/.bashrc"
 fi
 
 # Update settings.json
