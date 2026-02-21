@@ -4,6 +4,7 @@ WSL 环境下 Claude Code 停止输出时，向 Windows 发送桌面通知弹窗
 
 ![Windows 11](https://img.shields.io/badge/Windows%2011-WSL2-blue)
 
+
 ## 功能
 
 - Claude Code 停止输出时自动弹出 Windows 桌面通知
@@ -11,6 +12,9 @@ WSL 环境下 Claude Code 停止输出时，向 Windows 发送桌面通知弹窗
 - **点击通知精准跳回 Windows Terminal 对应 tab**（见下方技术亮点）
 - Win11 风格深色圆角弹窗，Claude 品牌配色
 - 10 秒后自动消失
+
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/ab32b5dd-8632-4db5-a94b-a746797351ab" />
+
 
 ## 技术亮点：点击跳回对应 Tab
 
