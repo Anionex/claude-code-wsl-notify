@@ -7,31 +7,18 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Read saved tab index, validate against current tab count, get tab title
-TAB_NUM=$(cat "/tmp/cc-tab-$WT_SESSION" 2>/dev/null)
-TAB_NUM=${TAB_NUM:-0}
-TAB_TITLE=""
-if [ "$TAB_NUM" -gt 0 ] 2>/dev/null; then
-    TAB_INFO=$(powershell.exe -NoProfile -Command "
+# Get selected tab title via UI Automation (Claude's tab is still selected at hook time)
+TAB_TITLE=$(powershell.exe -NoProfile -Command "
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 \$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
 \$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
 if(\$w){\$tc = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
 \$tabs = \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc)
-Write-Output \$tabs.Count
-if($TAB_NUM -le \$tabs.Count){Write-Output \$tabs[$((TAB_NUM-1))].Current.Name}}
+for(\$i=0;\$i -lt \$tabs.Count;\$i++){\$sp = \$tabs[\$i].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern)
+if(\$sp.Current.IsSelected){Write-Output \$tabs[\$i].Current.Name;break}}}
 " 2>/dev/null | tr -d '\r')
-    CUR_COUNT=$(echo "$TAB_INFO" | head -1)
-    TAB_TITLE=$(echo "$TAB_INFO" | sed -n '2p')
-    [ "$CUR_COUNT" -lt "$TAB_NUM" ] 2>/dev/null && TAB_NUM=0
-fi
-
-# Build tab switch command
-TAB_SWITCH=""
-if [ "$TAB_NUM" -gt 0 ] 2>/dev/null && [ "$TAB_NUM" -le 9 ] 2>/dev/null; then
-    TAB_SWITCH="Start-Sleep -Milliseconds 300;[System.Windows.Forms.SendKeys]::SendWait('^(%${TAB_NUM})')"
-fi
+TITLE_B64=$(echo -n "$TAB_TITLE" | base64 -w 0)
 
 # Write notification popup as .ps1 file
 cat > /tmp/cc-notify.ps1 << PSEOF
@@ -42,6 +29,8 @@ using System;using System.Runtime.InteropServices;
 public class W32{
 [DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr h);
 [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);
+[DllImport("user32.dll")]public static extern int GetWindowLong(IntPtr h,int i);
+[DllImport("user32.dll")]public static extern int SetWindowLong(IntPtr h,int i,int v);
 [DllImport("dwmapi.dll")]public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);
 }
 "@
@@ -60,6 +49,7 @@ public class W32{
 
 \$pref=2;\$null=[W32]::DwmSetWindowAttribute(\$f.Handle,33,[ref]\$pref,4)
 \$dark=1;\$null=[W32]::DwmSetWindowAttribute(\$f.Handle,20,[ref]\$dark,4)
+\$ex=[W32]::GetWindowLong(\$f.Handle,-20);\$null=[W32]::SetWindowLong(\$f.Handle,-20,\$ex -bor 0x08000000)
 
 \$bar=New-Object Windows.Forms.Panel
 \$bar.Size='4,110'
@@ -98,11 +88,23 @@ public class W32{
 \$bar.Add_Click(\$click)
 
 [Media.SystemSounds]::Asterisk.Play()
-\$f.ShowDialog()
+\$f.Show()
+[System.Windows.Forms.Application]::Run(\$f)
 
-if(\$script:clicked){\$p=Get-Process -Name WindowsTerminal -EA 0
+if(\$script:clicked){
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+\$tgt=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('$TITLE_B64'))
+\$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
+\$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
+if(\$w){\$tc = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
+\$tabs = \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc)
+\$idx=0
+for(\$i=0;\$i -lt \$tabs.Count;\$i++){if(\$tabs[\$i].Current.Name -eq \$tgt){\$idx=\$i+1;break}}
+\$p=Get-Process -Name WindowsTerminal -EA 0
 if(\$p){[W32]::ShowWindow(\$p[0].MainWindowHandle,9);\$null=[W32]::SetForegroundWindow(\$p[0].MainWindowHandle)
-$TAB_SWITCH}}
+if(\$idx -gt 0 -and \$idx -le 9){Start-Sleep -Milliseconds 300
+[System.Windows.Forms.SendKeys]::SendWait("^(%\$idx)")}}}}
 PSEOF
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w /tmp/cc-notify.ps1)" &>/dev/null &
