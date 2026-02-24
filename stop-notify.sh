@@ -31,6 +31,7 @@ public class W32{
 [DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr h,int c);
 [DllImport("user32.dll")]public static extern int GetWindowLong(IntPtr h,int i);
 [DllImport("user32.dll")]public static extern int SetWindowLong(IntPtr h,int i,int v);
+[DllImport("user32.dll")]public static extern bool SetWindowPos(IntPtr h,IntPtr a,int x,int y,int cx,int cy,uint f);
 [DllImport("dwmapi.dll")]public static extern int DwmSetWindowAttribute(IntPtr h,int a,ref int v,int s);
 }
 "@
@@ -40,7 +41,7 @@ public class W32{
 \$f=New-Object Windows.Forms.Form
 \$f.FormBorderStyle='None'
 \$f.Size='400,110'
-\$f.TopMost=\$true
+\$f.TopMost=\$false
 \$f.StartPosition='Manual'
 \$f.ShowInTaskbar=\$false
 \$wa=[Windows.Forms.Screen]::PrimaryScreen.WorkingArea
@@ -50,6 +51,7 @@ public class W32{
 \$pref=2;\$null=[W32]::DwmSetWindowAttribute(\$f.Handle,33,[ref]\$pref,4)
 \$dark=1;\$null=[W32]::DwmSetWindowAttribute(\$f.Handle,20,[ref]\$dark,4)
 \$ex=[W32]::GetWindowLong(\$f.Handle,-20);\$null=[W32]::SetWindowLong(\$f.Handle,-20,\$ex -bor 0x08000000)
+\$null=[W32]::SetWindowPos(\$f.Handle,[IntPtr]::new(-1),\$f.Left,\$f.Top,\$f.Width,\$f.Height,0x0010)
 
 \$bar=New-Object Windows.Forms.Panel
 \$bar.Size='4,110'
@@ -88,8 +90,9 @@ public class W32{
 \$bar.Add_Click(\$click)
 
 [Media.SystemSounds]::Asterisk.Play()
-\$f.Show()
-[System.Windows.Forms.Application]::Run(\$f)
+[W32]::ShowWindow(\$f.Handle,8)
+\$f.Add_FormClosed({[System.Windows.Forms.Application]::ExitThread()})
+[System.Windows.Forms.Application]::Run()
 
 if(\$script:clicked){
 Add-Type -AssemblyName UIAutomationClient
