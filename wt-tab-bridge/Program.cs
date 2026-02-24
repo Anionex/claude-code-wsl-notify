@@ -88,7 +88,6 @@ internal static class Program
 
         AutomationElement? wtWindow = null;
         try { wtWindow = AutomationElement.FromHandle(hwnd); } catch { }
-
         if (wtWindow == null)
         {
             Console.Error.WriteLine("Window handle invalid.");
@@ -120,7 +119,6 @@ internal static class Program
         var cond = new PropertyCondition(AutomationElement.ClassNameProperty, "CASCADIA_HOSTING_WINDOW_CLASS");
         var windows = AutomationElement.RootElement.FindAll(TreeScope.Children, cond);
 
-        // Prefer the foreground WT window
         AutomationElement? fgWindow = null;
         foreach (AutomationElement w in windows)
         {
@@ -128,7 +126,6 @@ internal static class Program
             { fgWindow = w; break; }
         }
 
-        // Search foreground window first, then others
         var ordered = new List<AutomationElement>();
         if (fgWindow != null) ordered.Add(fgWindow);
         foreach (AutomationElement w in windows)

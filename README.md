@@ -31,7 +31,7 @@ WSL 环境下 Claude Code 停止输出时，向 Windows 发送桌面通知弹窗
 - WSL interop 已开启（默认开启）
 - `jq`：`sudo apt install jq`
 - `powershell.exe`：WSL 默认可访问
-- `.NET 8 SDK`：需要在 Windows 侧安装，用于编译 `wt-tab-bridge.exe`（[下载](https://dotnet.microsoft.com/download/dotnet/8.0)）
+- `.NET 8 Desktop Runtime`：需要在 Windows 侧安装（[下载](https://dotnet.microsoft.com/download/dotnet/8.0)），很多 Windows 应用已自带
 
 ## 安装
 

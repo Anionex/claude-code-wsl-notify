@@ -6,31 +6,34 @@ HOOK_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
 # Check dependencies
-for cmd in jq powershell.exe curl dotnet.exe; do
+for cmd in jq powershell.exe curl; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "Error: $cmd not found"
         exit 1
     fi
 done
 
+# Check .NET Desktop Runtime
+if ! dotnet.exe --list-runtimes 2>/dev/null | tr -d '\r' | grep -q "Microsoft.WindowsDesktop.App 8\."; then
+    echo "Error: .NET 8 Desktop Runtime not found on Windows."
+    echo "Download from: https://dotnet.microsoft.com/download/dotnet/8.0"
+    exit 1
+fi
+
 # Download hook script
 mkdir -p "$HOOK_DIR"
 curl -fsSL "$REPO/stop-notify.sh" -o "$HOOK_DIR/stop-notify.sh"
 chmod +x "$HOOK_DIR/stop-notify.sh"
 
-# Build and install wt-tab-bridge.exe
+# Download pre-built wt-tab-bridge.exe
 WIN_LOCALAPPDATA=$(cmd.exe /c "echo %LOCALAPPDATA%" 2>/dev/null | tr -d '\r')
-BRIDGE_DIR="$WIN_LOCALAPPDATA\\wt-tab-bridge"
 BRIDGE_DIR_WSL=$(wslpath "$WIN_LOCALAPPDATA")/wt-tab-bridge
-TMP_BUILD=$(mktemp -d)
-curl -fsSL "$REPO/wt-tab-bridge/WtTabBridge.csproj" -o "$TMP_BUILD/WtTabBridge.csproj"
-curl -fsSL "$REPO/wt-tab-bridge/Program.cs" -o "$TMP_BUILD/Program.cs"
-echo "Building wt-tab-bridge.exe..."
-dotnet.exe publish "$(wslpath -w "$TMP_BUILD/WtTabBridge.csproj")" \
-    -c Release -o "$BRIDGE_DIR" --no-self-contained -v quiet 2>&1 | tr -d '\r'
-rm -rf "$TMP_BUILD"
+mkdir -p "$BRIDGE_DIR_WSL"
 BRIDGE_EXE_WSL="$BRIDGE_DIR_WSL/wt-tab-bridge.exe"
-[ -f "$BRIDGE_EXE_WSL" ] || { echo "Error: build failed"; exit 1; }
+echo "Downloading wt-tab-bridge.exe..."
+curl -fsSL "https://github.com/Anionex/claude-code-wsl-notify/releases/latest/download/wt-tab-bridge.exe" \
+    -o "$BRIDGE_EXE_WSL"
+[ -f "$BRIDGE_EXE_WSL" ] || { echo "Error: download failed"; exit 1; }
 
 # Add tab registration to bashrc
 if ! grep -qF "wt-tab-bridge" "$HOME/.bashrc" 2>/dev/null; then
