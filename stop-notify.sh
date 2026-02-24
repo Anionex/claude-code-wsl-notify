@@ -7,9 +7,8 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Read saved tab index (saved at shell startup by save-tab-index.sh)
-TAB_IDX=$(cat "/tmp/cc-tab-$WT_SESSION" 2>/dev/null)
-TAB_IDX=${TAB_IDX:-0}
+# Resolve bridge exe path
+BRIDGE_EXE="$(cmd.exe /c "echo %LOCALAPPDATA%" 2>/dev/null | tr -d '\r')\\wt-tab-bridge\\wt-tab-bridge.exe"
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
 CWD_NAME=$(basename "$CWD" 2>/dev/null)
 
@@ -87,11 +86,7 @@ public class W32{
 \$f.Add_FormClosed({[System.Windows.Forms.Application]::ExitThread()})
 [System.Windows.Forms.Application]::Run()
 
-if(\$script:clicked){\$idx=$TAB_IDX
-\$p=Get-Process -Name WindowsTerminal -EA 0
-if(\$p){[W32]::ShowWindow(\$p[0].MainWindowHandle,9);\$null=[W32]::SetForegroundWindow(\$p[0].MainWindowHandle)
-if(\$idx -gt 0 -and \$idx -le 9){Start-Sleep -Milliseconds 300
-[System.Windows.Forms.SendKeys]::SendWait("^(%\$idx)")}}}
+if(\$script:clicked){Start-Process -FilePath '$BRIDGE_EXE' -ArgumentList 'focus','--session','$WT_SESSION' -WindowStyle Hidden -Wait}
 PSEOF
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w /tmp/cc-notify.ps1)" &>/dev/null &

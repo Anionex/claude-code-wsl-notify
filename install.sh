@@ -6,34 +6,39 @@ HOOK_DIR="$HOME/.claude/hooks"
 SETTINGS="$HOME/.claude/settings.json"
 
 # Check dependencies
-for cmd in jq powershell.exe curl; do
+for cmd in jq powershell.exe curl dotnet.exe; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "Error: $cmd not found"
         exit 1
     fi
 done
 
-# Download and install hook scripts
+# Download hook script
 mkdir -p "$HOOK_DIR"
 curl -fsSL "$REPO/stop-notify.sh" -o "$HOOK_DIR/stop-notify.sh"
-curl -fsSL "$REPO/save-tab-index.sh" -o "$HOOK_DIR/save-tab-index.sh"
-chmod +x "$HOOK_DIR/stop-notify.sh" "$HOOK_DIR/save-tab-index.sh"
+chmod +x "$HOOK_DIR/stop-notify.sh"
 
-# Add tab index saving + dynamic refresh to bashrc
-if ! grep -qF "save-tab-index.sh" "$HOME/.bashrc" 2>/dev/null; then
-    cat >> "$HOME/.bashrc" << 'BASHEOF'
+# Build and install wt-tab-bridge.exe
+WIN_LOCALAPPDATA=$(cmd.exe /c "echo %LOCALAPPDATA%" 2>/dev/null | tr -d '\r')
+BRIDGE_DIR="$WIN_LOCALAPPDATA\\wt-tab-bridge"
+BRIDGE_DIR_WSL=$(wslpath "$WIN_LOCALAPPDATA")/wt-tab-bridge
+TMP_BUILD=$(mktemp -d)
+curl -fsSL "$REPO/wt-tab-bridge/WtTabBridge.csproj" -o "$TMP_BUILD/WtTabBridge.csproj"
+curl -fsSL "$REPO/wt-tab-bridge/Program.cs" -o "$TMP_BUILD/Program.cs"
+echo "Building wt-tab-bridge.exe..."
+dotnet.exe publish "$(wslpath -w "$TMP_BUILD/WtTabBridge.csproj")" \
+    -c Release -o "$BRIDGE_DIR" --no-self-contained -v quiet 2>&1 | tr -d '\r'
+rm -rf "$TMP_BUILD"
+BRIDGE_EXE_WSL="$BRIDGE_DIR_WSL/wt-tab-bridge.exe"
+[ -f "$BRIDGE_EXE_WSL" ] || { echo "Error: build failed"; exit 1; }
 
-# claude-code-wsl-notify: save tab index on shell startup & keep it fresh
-if [ -n "$WT_SESSION" ] && [ -f ~/.claude/hooks/save-tab-index.sh ]; then
-    bash ~/.claude/hooks/save-tab-index.sh &>/dev/null
-    _cc_refresh_tab() {
-        local now; now=$(date +%s)
-        local last; last=$(cat "/tmp/cc-tab-ts-$WT_SESSION" 2>/dev/null || echo 0)
-        (( now - last < 10 )) && return
-        echo "$now" > "/tmp/cc-tab-ts-$WT_SESSION"
-        bash ~/.claude/hooks/save-tab-index.sh &>/dev/null &
-    }
-    PROMPT_COMMAND="_cc_refresh_tab;${PROMPT_COMMAND}"
+# Add tab registration to bashrc
+if ! grep -qF "wt-tab-bridge" "$HOME/.bashrc" 2>/dev/null; then
+    cat >> "$HOME/.bashrc" << BASHEOF
+
+# claude-code-wsl-notify: register tab mapping on shell startup
+if [ -n "\$WT_SESSION" ]; then
+    "$BRIDGE_EXE_WSL" register --session "\$WT_SESSION" &>/dev/null
 fi
 BASHEOF
 fi
