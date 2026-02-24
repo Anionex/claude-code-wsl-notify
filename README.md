@@ -20,10 +20,10 @@ WSL 环境下 Claude Code 停止输出时，向 Windows 发送桌面通知弹窗
 
 从 WSL hook 子进程中精准定位并切换 Windows Terminal tab 是一个非平凡的问题，涉及多层跨系统交互：
 
-1. **Tab 定位**：通过 PowerShell 调用 Windows UI Automation API，遍历 `CASCADIA_HOSTING_WINDOW_CLASS` 窗口下所有 `TabItem` 元素，匹配当前工作目录名称来确定 tab 索引
-2. **跨作用域调用**：WinForms 事件 scriptblock 无法访问外部 `Add-Type` 定义的 P/Invoke 类型，因此将窗口激活逻辑写入独立 `.ps1` 辅助脚本，点击时启动新 PowerShell 进程执行
-3. **窗口激活**：通过 `user32.dll` 的 `ShowWindow` + `SetForegroundWindow` 将终端从最小化/后台恢复到前台
-4. **Tab 切换**：`wt.exe focus-tab` 在此场景下不可靠，改用 `SendKeys` 发送 `Ctrl+Alt+N` 快捷键实现精准切换
+1. **Tab 定位**：通过 C# 编写的 `wt-tab-bridge.exe` 桥接工具，利用 UI Automation 的 `RuntimeId`（元素实例级标识符）建立 `WT_SESSION → Tab` 映射。RuntimeId 在标签页存活期间稳定，不受拖动重排序或重名标签页影响
+2. **Tab 注册**：每次打开新终端标签页时，`.bashrc` 中的 register 命令自动将当前 `WT_SESSION` 与选中 TabItem 的 RuntimeId 关联，写入本地映射文件
+3. **Tab 切换**：点击通知时调用 `wt-tab-bridge.exe focus`，通过 RuntimeId 精确找到目标 TabItem，使用 `SelectionItemPattern.Select()` 直接切换，无需依赖 SendKeys 或位置索引
+4. **窗口激活**：通过 `user32.dll` 的 `ShowWindow` + `SetForegroundWindow` 将终端从最小化/后台恢复到前台
 
 ## 依赖
 
@@ -31,6 +31,7 @@ WSL 环境下 Claude Code 停止输出时，向 Windows 发送桌面通知弹窗
 - WSL interop 已开启（默认开启）
 - `jq`：`sudo apt install jq`
 - `powershell.exe`：WSL 默认可访问
+- `.NET 8 SDK`：需要在 Windows 侧安装，用于编译 `wt-tab-bridge.exe`（[下载](https://dotnet.microsoft.com/download/dotnet/8.0)）
 
 ## 安装
 
@@ -68,19 +69,25 @@ chmod +x install.sh
 
 ## 工作原理
 
-1. Claude Code 的 `Stop` hook 触发时，脚本从 stdin 读取 JSON，提取 `last_assistant_message` 作为摘要
-2. 通过 UI Automation 遍历 Windows Terminal 所有 tab，匹配工作目录名定位 tab 索引
-3. 生成 `.ps1` 辅助脚本，包含窗口激活和 tab 切换逻辑
-4. 弹出 WinForms 无边框圆角窗口（DWM 圆角 + 深色模式），显示摘要
-5. 点击弹窗时，启动独立 PowerShell 进程执行辅助脚本，通过 `SendKeys` 切换到对应 tab
+1. 每次打开新终端标签页时，`.bashrc` 中的命令调用 `wt-tab-bridge.exe register` 将 `WT_SESSION` 与当前 TabItem 的 RuntimeId 关联
+2. Claude Code 的 `Stop` hook 触发时，脚本从 stdin 读取 JSON，提取 `last_assistant_message` 作为摘要
+3. 弹出 WinForms 无边框圆角窗口（DWM 圆角 + 深色模式），显示摘要
+4. 点击弹窗时，调用 `wt-tab-bridge.exe focus` 通过 RuntimeId 精确定位并切换到对应 tab
 
 ## 卸载
 
 ```bash
-rm ~/.claude/hooks/stop-notify.sh ~/.claude/hooks/save-tab-index.sh
+chmod +x uninstall.sh
+./uninstall.sh
 ```
 
-然后从 `~/.claude/settings.json` 中移除 `Stop` hook 配置，从 `~/.bashrc` 中移除 `save-tab-index.sh` 相关行。
+或手动清理：
+
+```bash
+rm ~/.claude/hooks/stop-notify.sh
+```
+
+然后从 `~/.claude/settings.json` 中移除 `Stop` hook 配置，从 `~/.bashrc` 中移除 `wt-tab-bridge` 相关行，删除 `%LOCALAPPDATA%\wt-tab-bridge\` 目录。
 
 ## License
 
