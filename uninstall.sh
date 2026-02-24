@@ -5,9 +5,9 @@ SETTINGS="$HOME/.claude/settings.json"
 # Remove hook scripts
 rm -f "$HOOK_DIR/stop-notify.sh" "$HOOK_DIR/save-tab-index.sh"
 
-# Remove bashrc line
+# Remove bashrc block
 if [ -f "$HOME/.bashrc" ]; then
-    sed -i '/claude-code-wsl-notify/d;/save-tab-index\.sh/d' "$HOME/.bashrc"
+    sed -i '/# claude-code-wsl-notify/,/^fi$/d' "$HOME/.bashrc"
 fi
 
 # Remove Stop hook from settings.json
@@ -17,6 +17,6 @@ if [ -f "$SETTINGS" ] && command -v jq &>/dev/null; then
 fi
 
 # Clean up temp files
-rm -f /tmp/cc-tab-* /tmp/cc-notify-click.ps1
+rm -f /tmp/cc-tab-* /tmp/cc-tab-ts-* /tmp/cc-notify.ps1
 
 echo "Uninstalled successfully! Restart Claude Code to take effect."

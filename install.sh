@@ -19,9 +19,23 @@ curl -fsSL "$REPO/stop-notify.sh" -o "$HOOK_DIR/stop-notify.sh"
 curl -fsSL "$REPO/save-tab-index.sh" -o "$HOOK_DIR/save-tab-index.sh"
 chmod +x "$HOOK_DIR/stop-notify.sh" "$HOOK_DIR/save-tab-index.sh"
 
-# Add tab index saving to bashrc
+# Add tab index saving + dynamic refresh to bashrc
 if ! grep -qF "save-tab-index.sh" "$HOME/.bashrc" 2>/dev/null; then
-    echo -e '\n# claude-code-wsl-notify: save tab index on shell startup\n[ -n "$WT_SESSION" ] && [ -f ~/.claude/hooks/save-tab-index.sh ] && bash ~/.claude/hooks/save-tab-index.sh &>/dev/null' >> "$HOME/.bashrc"
+    cat >> "$HOME/.bashrc" << 'BASHEOF'
+
+# claude-code-wsl-notify: save tab index on shell startup & keep it fresh
+if [ -n "$WT_SESSION" ] && [ -f ~/.claude/hooks/save-tab-index.sh ]; then
+    bash ~/.claude/hooks/save-tab-index.sh &>/dev/null
+    _cc_refresh_tab() {
+        local now; now=$(date +%s)
+        local last; last=$(cat "/tmp/cc-tab-ts-$WT_SESSION" 2>/dev/null || echo 0)
+        (( now - last < 10 )) && return
+        echo "$now" > "/tmp/cc-tab-ts-$WT_SESSION"
+        bash ~/.claude/hooks/save-tab-index.sh &>/dev/null &
+    }
+    PROMPT_COMMAND="_cc_refresh_tab;${PROMPT_COMMAND}"
+fi
+BASHEOF
 fi
 
 # Update settings.json
