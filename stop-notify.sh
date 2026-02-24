@@ -7,18 +7,11 @@ SUMMARY=$(echo "$INPUT" | jq -r '.last_assistant_message // "Claude Code 已完�
 SUMMARY="${SUMMARY:0:300}"
 B64=$(echo -n "$SUMMARY" | base64 -w 0)
 
-# Get selected tab title via UI Automation (Claude's tab is still selected at hook time)
-TAB_TITLE=$(powershell.exe -NoProfile -Command "
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-\$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
-\$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
-if(\$w){\$tc = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
-\$tabs = \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc)
-for(\$i=0;\$i -lt \$tabs.Count;\$i++){\$sp = \$tabs[\$i].GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern)
-if(\$sp.Current.IsSelected){Write-Output \$tabs[\$i].Current.Name;break}}}
-" 2>/dev/null | tr -d '\r')
-TITLE_B64=$(echo -n "$TAB_TITLE" | base64 -w 0)
+# Read saved tab index (saved at shell startup by save-tab-index.sh)
+TAB_IDX=$(cat "/tmp/cc-tab-$WT_SESSION" 2>/dev/null)
+TAB_IDX=${TAB_IDX:-0}
+CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
+CWD_NAME=$(basename "$CWD" 2>/dev/null)
 
 # Write notification popup as .ps1 file
 cat > /tmp/cc-notify.ps1 << PSEOF
@@ -60,7 +53,7 @@ public class W32{
 \$f.Controls.Add(\$bar)
 
 \$title=New-Object Windows.Forms.Label
-\$title.Text='Claude Code - $TAB_TITLE'
+\$title.Text='Claude Code - $CWD_NAME'
 \$title.Location=[Drawing.Point]::new(18,14)
 \$title.Size='360,22'
 \$title.Font=New-Object Drawing.Font('Segoe UI',10.5,[Drawing.FontStyle]::Bold)
@@ -94,20 +87,11 @@ public class W32{
 \$f.Add_FormClosed({[System.Windows.Forms.Application]::ExitThread()})
 [System.Windows.Forms.Application]::Run()
 
-if(\$script:clicked){
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
-\$tgt=[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('$TITLE_B64'))
-\$c = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ClassNameProperty,'CASCADIA_HOSTING_WINDOW_CLASS')
-\$w = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children,\$c)
-if(\$w){\$tc = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::TabItem)
-\$tabs = \$w.FindAll([Windows.Automation.TreeScope]::Descendants,\$tc)
-\$idx=0
-for(\$i=0;\$i -lt \$tabs.Count;\$i++){if(\$tabs[\$i].Current.Name -eq \$tgt){\$idx=\$i+1;break}}
+if(\$script:clicked){\$idx=$TAB_IDX
 \$p=Get-Process -Name WindowsTerminal -EA 0
 if(\$p){[W32]::ShowWindow(\$p[0].MainWindowHandle,9);\$null=[W32]::SetForegroundWindow(\$p[0].MainWindowHandle)
 if(\$idx -gt 0 -and \$idx -le 9){Start-Sleep -Milliseconds 300
-[System.Windows.Forms.SendKeys]::SendWait("^(%\$idx)")}}}}
+[System.Windows.Forms.SendKeys]::SendWait("^(%\$idx)")}}}
 PSEOF
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w /tmp/cc-notify.ps1)" &>/dev/null &
